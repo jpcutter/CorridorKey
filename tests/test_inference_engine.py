@@ -6,7 +6,7 @@ conversion) and post-processing (upscale, despill, premultiply, composite)
 pipeline that wraps the neural network.
 
 Why mock the model?
-  The model requires a ~500MB checkpoint and CUDA. The pre/post-processing
+  The model requires a ~300MB checkpoint and CUDA. The pre/post-processing
   pipeline is where compositing bugs hide (wrong color space, premul errors,
   alpha dimension mismatches). Mocking the model isolates that logic.
 """

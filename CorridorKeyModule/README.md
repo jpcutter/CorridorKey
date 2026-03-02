@@ -9,13 +9,13 @@ A self-contained, high-performance AI Chroma Keying engine. This module provides
 
 ## Installation
 
-Dependencies for the engine are managed in the main project root `requirements.txt`.  
+Dependencies for the engine are managed in the main project root `pyproject.toml` using [uv](https://docs.astral.sh/uv/). Run `uv sync` from the project root to install everything.
 *(Requires PyTorch, NumPy, OpenCV, Timm)*
 
 ## Usage (GUI Wizard)
 
 For most users, the easiest way to interact with the module is through the included wizard:
-`clip_manager.py` (or dragging and dropping folders onto the `.bat` / `.sh` scripts).
+`corridorkey_cli.py` (or dragging and dropping folders onto the `.bat` / `.sh` scripts).
 The wizard handles finding the latest `.pth` checkpoint automatically, prompting for configuration (gamma, despill strength, despeckling), and batch processing entire sequences.
 
 ## Usage (Python API)

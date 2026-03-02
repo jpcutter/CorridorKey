@@ -6,6 +6,34 @@ How CorridorKey handles color, and how to correctly use its output in your compo
 
 ---
 
+## Critical Invariants
+
+These rules **must not be broken**. When debugging compositing issues, check these first:
+
+1. **Model I/O is strictly `[0.0, 1.0]` float tensors.**
+   - Input: sRGB color space (ImageNet-normalized: mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+   - Output FG (`res['fg']`): sRGB, straight (un-premultiplied)
+   - Output Alpha (`res['alpha']`): Linear
+
+2. **EXR outputs are Linear float, premultiplied.**
+   - The `Processed` pass: `srgb_to_linear(fg) * alpha` packed as RGBA half-float EXR
+   - Uses PXR24 compression (verified smallest working format)
+   - Never apply a pure `gamma 2.2` curve — use the piecewise sRGB transfer functions in `color_utils.py`
+
+3. **Inference resolution is fixed at 2048x2048.**
+   - Input is resized via bilinear interpolation → processed at 2048x2048 → resized back via Lanczos4
+   - Linear inputs are resized in linear space, then converted to sRGB before the model
+   - sRGB inputs are resized directly in sRGB space
+
+4. **Despill is luminance-preserving.**
+   - Green excess `= max(0, G - (R+B)/2)` redistributed equally to R and B channels
+   - Applied in sRGB space before linear conversion
+
+5. **Auto-despeckle uses connected-components morphology.**
+   - Threshold at 0.5 → find components → keep areas >= threshold → dilate → blur → multiply
+
+---
+
 ## What Makes CorridorKey Different
 
 Traditional chroma keyers produce a binary mask and then try to remove green spill as a post-process. The foreground "color" is whatever was in the original plate with green subtracted.

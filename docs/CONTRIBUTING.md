@@ -51,7 +51,7 @@ Some of the most valuable contributions don't involve writing a single line of P
 2. **Install dependencies with uv:**
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh   # Install uv (if not already installed)
-   uv sync                                             # Install Python + all dependencies
+   uv sync --group dev                                 # Install all deps + test/lint tools
    ```
 
 3. **Download the model checkpoint** (see [Getting Started](GETTING_STARTED.md#verifying-your-installation))
@@ -59,7 +59,8 @@ Some of the most valuable contributions don't involve writing a single line of P
 4. **Verify your setup:**
    ```bash
    uv run python -c "from CorridorKeyModule import CorridorKeyEngine; print('OK')"
-   uv run python test_vram.py  # If you have a GPU
+   uv run pytest                                       # Run the test suite (no GPU needed)
+   uv run python test_vram.py                          # VRAM benchmark (requires GPU)
    ```
 
 ---
@@ -69,7 +70,7 @@ Some of the most valuable contributions don't involve writing a single line of P
 ### Code Style
 
 - **Python 3.11+** — use modern syntax (type hints, f-strings, walrus operator where clear)
-- **No strict formatter enforced** — match the style of surrounding code
+- **Linter:** [ruff](https://docs.astral.sh/ruff/) is configured in `pyproject.toml` (line-length 120, rules: `E`, `F`, `W`, `I`, `B`). Third-party modules (`gvm_core/`, `VideoMaMaInferenceModule/`) are excluded. Run `uv run ruff check .` to lint
 - **Imports:** stdlib → third-party → local, separated by blank lines
 - **Naming:** `snake_case` for functions/variables, `PascalCase` for classes
 - **Constants:** `UPPER_SNAKE_CASE` (see `clip_manager.py` for examples)
@@ -86,12 +87,14 @@ This is the most critical area. All color operations must:
 
 ```
 CorridorKey/
-├── clip_manager.py              # CLI wizard — user-facing orchestration
+├── corridorkey_cli.py           # CLI entry point — wizard, arg parsing
+├── clip_manager.py              # Pipeline library — importable functions
 ├── CorridorKeyModule/           # Core engine — inference only
 │   ├── inference_engine.py      # Public API
 │   └── core/                    # Architecture + math
 ├── gvm_core/                    # GVM module — self-contained
 ├── VideoMaMaInferenceModule/    # VideoMaMa module — self-contained
+├── tests/                       # Pytest test suite
 └── docs/                        # Documentation
 ```
 
@@ -112,9 +115,10 @@ This processes video frame-by-frame at high resolution. Avoid:
 
 1. Create a branch: `git checkout -b fix/description-of-fix`
 2. Make your changes
-3. Verify with `test_vram.py` if engine changes were made
-4. Test manually with a green screen clip
-5. Submit a PR with:
+3. Run `uv run pytest` to ensure existing tests pass
+4. Run `uv run python test_vram.py` if engine changes were made (requires GPU)
+5. Test manually with a green screen clip
+6. Submit a PR with:
    - What the bug was
    - How you fixed it
    - How you tested it
@@ -146,7 +150,9 @@ When reviewing PRs (or self-reviewing before submitting), check:
 - [ ] **EXR output is linear premultiplied** — the VFX standard
 - [ ] **No hardcoded paths** — use relative paths or `BASE_DIR`
 - [ ] **No model weights committed** — `.pth`, `.pt`, `.safetensors` are in `.gitignore`
-- [ ] **VRAM usage hasn't regressed** — run `test_vram.py` if engine changed
+- [ ] **Tests pass** — `uv run pytest` succeeds (no GPU required)
+- [ ] **Lint passes** — `uv run ruff check .` shows no errors
+- [ ] **VRAM usage hasn't regressed** — run `test_vram.py` if engine changed (requires GPU)
 - [ ] **Existing API not broken** — `process_frame()` signature and return dict unchanged
 - [ ] **Module independence preserved** — gvm_core and VideoMaMa remain self-contained
 

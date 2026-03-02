@@ -44,6 +44,40 @@ uv run python -c "from CorridorKeyModule import CorridorKeyEngine; print('Corrid
 
 You should see PyTorch version, CUDA availability, and no import errors.
 
+You can also run the CLI directly via the `corridorkey` console script:
+```bash
+uv run corridorkey --action wizard --win_path /path/to/clips
+```
+
+### CLI Commands Reference
+
+```bash
+# Run wizard (primary usage — interactive)
+uv run python corridorkey_cli.py --action wizard --win_path /path/to/clips
+
+# Run via launcher scripts (artist-friendly)
+./CorridorKey_DRAG_CLIPS_HERE_local.sh /path/to/clips
+
+# Run via console script (installed by uv sync)
+uv run corridorkey --action wizard --win_path /path/to/clips
+
+# Generate alpha hints only (uses GVM)
+uv run python corridorkey_cli.py --action generate_alphas
+
+# Run inference only (clips must have Input + AlphaHint)
+uv run python corridorkey_cli.py --action run_inference
+
+# List/validate clips
+uv run python corridorkey_cli.py --action list
+
+# Run tests (no GPU required)
+uv sync --group dev                                 # Install test dependencies
+uv run pytest                                       # Run all tests
+
+# Test VRAM usage (requires GPU)
+uv run python test_vram.py
+```
+
 ---
 
 ## Supported Input Formats

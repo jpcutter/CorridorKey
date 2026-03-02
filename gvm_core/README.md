@@ -9,7 +9,6 @@ It is designed to be a self-contained, portable module that can be dropped into 
 gvm_core/
 ├── __init__.py           # Exports the main GVMProcessor class
 ├── wrapper.py            # High-level API for inference
-├── requirements.txt      # List of dependencies
 ├── gvm/                  # The core library package
 │   ├── models/           # Spatio-temporal UNet definitions
 │   ├── pipelines/        # Diffusers-based pipeline logic
@@ -19,15 +18,9 @@ gvm_core/
 
 ## Installation
 
-1. **Install Dependencies**:
-   Ensure you have a Python environment set up (Python 3.10+ recommended).
-   Install the required packages:
+When used as part of the CorridorKey project, all dependencies are managed by [uv](https://docs.astral.sh/uv/) via the root `pyproject.toml`. Run `uv sync` from the project root.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   *Note: You may need to install PyTorch separately first to match your CUDA version.*
+For standalone use, ensure you have Python 3.10+ and the required packages (PyTorch, Diffusers, Transformers, OpenCV, etc.).
 
 ## Usage
 

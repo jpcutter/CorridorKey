@@ -1,12 +1,128 @@
 # CorridorKey: LLM Handover Guide
 
-This document supplements [CLAUDE.md](../CLAUDE.md) with deeper technical detail for AI coding assistants. Read CLAUDE.md first — it has the architecture overview, color pipeline rules, directory structure, API signatures, and common pitfalls.
+Technical reference for AI coding assistants working on the CorridorKey codebase. This is the primary reference document — read this when you need project context.
 
-This document covers what CLAUDE.md does not: forward pass pseudocode, alpha generator internals, the clip manager's data model, and debugging/directive guidance.
+For full API signatures, see [API_REFERENCE.md](API_REFERENCE.md). For architecture diagrams and model internals, see [ARCHITECTURE.md](ARCHITECTURE.md). For color math details, see [COLOR_PIPELINE.md](COLOR_PIPELINE.md).
 
 ---
 
-## 1. Forward Pass Detail
+## 1. Quick Reference
+
+| Item | Detail |
+|---|---|
+| Language | Python 3.11+ |
+| Framework | PyTorch 2.9.1, Timm 1.0.24, Diffusers, OpenCV |
+| CLI entry point | `corridorkey_cli.py` (`corridorkey` console script) |
+| Pipeline library | `clip_manager.py` (importable, no CLI) |
+| Core engine | `CorridorKeyModule/inference_engine.py` |
+| Model arch | `CorridorKeyModule/core/model_transformer.py` |
+| Color math | `CorridorKeyModule/core/color_utils.py` |
+| Alpha generators | `gvm_core/` (GVM) and `VideoMaMaInferenceModule/` (VideoMaMa) |
+| Checkpoint | `CorridorKeyModule/checkpoints/CorridorKey.pth` (~300MB) |
+| Native resolution | 2048x2048 (bilinear resize in, Lanczos4 resize out) |
+| Min VRAM | ~22.7 GB (CorridorKey alone) |
+| Package manager | [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`) |
+| Tests | `tests/` (pytest suite: color math, clip manager, inference engine) + `test_vram.py` (GPU VRAM benchmark) |
+| Linter | [ruff](https://docs.astral.sh/ruff/) (configured in `pyproject.toml`, excludes third-party modules) |
+| CI/CD | None |
+
+### Target Audience
+
+Two distinct user groups — route them appropriately:
+- **VFX Artists / Editors** → `docs/QUICKSTART_ARTISTS.md`
+- **Developers / ML Engineers** → `docs/GETTING_STARTED.md` and `docs/API_REFERENCE.md`
+
+---
+
+## 2. Directory Structure
+
+```
+CorridorKey/
+├── corridorkey_cli.py                 # CLI entry point — wizard, arg parsing, console script
+├── clip_manager.py                    # Pipeline library — ClipEntry, inference, alpha gen
+├── test_vram.py                       # VRAM benchmark utility (manual, GPU-only)
+├── pyproject.toml                     # Dependencies and project metadata (uv)
+│
+├── CorridorKey_DRAG_CLIPS_HERE_local.sh   # Linux/macOS launcher
+├── CorridorKey_DRAG_CLIPS_HERE_local.bat  # Windows launcher
+├── Install_CorridorKey_Windows.bat        # Windows auto-installer
+├── Install_GVM_Windows.bat                # GVM module installer
+├── Install_VideoMaMa_Windows.bat          # VideoMaMa module installer
+├── RunGVMOnly.sh                          # Alpha generation only
+├── RunInferenceOnly.sh                    # Inference only
+│
+├── tests/                             # Pytest test suite (no GPU required)
+│   ├── conftest.py                    # Shared fixtures (sample frames, mock model, tmp dirs)
+│   ├── test_imports.py                # Smoke tests — all packages import cleanly
+│   ├── test_color_utils.py            # sRGB/Linear, premul, despill, clean_matte, compositing
+│   ├── test_gamma_consistency.py      # Documents the gamma 2.2 vs piecewise sRGB inconsistency
+│   ├── test_clip_manager.py           # File detection, path mapping, ClipEntry discovery
+│   └── test_inference_engine.py       # process_frame pipeline (mocked model, no GPU)
+│
+├── CorridorKeyModule/                 # Core engine
+│   ├── __init__.py                    # Exports CorridorKeyEngine
+│   ├── inference_engine.py            # CorridorKeyEngine class
+│   ├── README.md
+│   └── core/
+│       ├── model_transformer.py       # GreenFormer architecture
+│       └── color_utils.py             # Compositing math
+│
+├── gvm_core/                          # GVM alpha hint generator
+│   ├── __init__.py                    # Exports GVMProcessor
+│   ├── wrapper.py                     # GVMProcessor class
+│   ├── LICENSE.md                     # CC BY-NC-SA 4.0
+│   ├── README.md
+│   └── gvm/                           # Internal diffusion package
+│       ├── models/unet_spatio_temporal_condition.py
+│       ├── pipelines/pipeline_gvm.py
+│       └── utils/inference_utils.py
+│
+├── VideoMaMaInferenceModule/          # VideoMaMa alpha hint generator
+│   ├── __init__.py                    # Exports load_videomama_model, etc.
+│   ├── inference.py                   # Inference API
+│   ├── pipeline.py                    # SVD-based pipeline
+│   ├── LICENSE.md                     # CC BY-NC 4.0 + Stability AI
+│   └── README.md
+│
+├── ClipsForInference/                 # User input staging area
+├── Output/                            # Output destination
+├── IgnoredClips/                      # Excluded clips
+└── docs/                              # Documentation
+```
+
+---
+
+## 3. Key API Entry Points
+
+For full signatures and return types, see [API_REFERENCE.md](API_REFERENCE.md).
+
+### `CorridorKeyEngine` (`CorridorKeyModule/inference_engine.py`)
+- `__init__(checkpoint_path, device='cuda', img_size=2048, use_refiner=True)`
+- `process_frame(image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400)` → dict with keys: `alpha`, `fg`, `comp`, `processed`
+
+### `color_utils` (`CorridorKeyModule/core/color_utils.py`)
+- `srgb_to_linear(x)` / `linear_to_srgb(x)` — piecewise sRGB transfer, supports NumPy and PyTorch
+- `premultiply(fg, alpha)` / `unpremultiply(fg, alpha)`
+- `composite_straight(fg, bg, alpha)` / `composite_premul(fg, bg, alpha)`
+- `despill(image, green_limit_mode='average', strength=1.0)` — luminance-preserving
+- `clean_matte(alpha_np, area_threshold, dilation, blur_size)` — morphological cleanup
+- `dilate_mask(mask, radius)` — supports NumPy (cv2) and PyTorch (MaxPool)
+
+### `corridorkey_cli` (`corridorkey_cli.py`)
+- `main()` — argparse CLI entry point, registered as `corridorkey` console script
+- `interactive_wizard(win_path)` — the interactive wizard loop
+
+### `GVMProcessor` (`gvm_core/wrapper.py`)
+- `__init__(model_base=None, unet_base=None, lora_base=None, device="cuda", seed=None)`
+- `process_sequence(input_path, output_dir, num_frames_per_batch=8, denoise_steps=1, ...)`
+
+### `VideoMaMaInferenceModule` (`VideoMaMaInferenceModule/inference.py`)
+- `load_videomama_model(base_model_path=None, unet_checkpoint_path=None, device="cuda")`
+- `run_inference(pipeline, input_frames, mask_frames, chunk_size=24)` — generator yielding frame chunks
+
+---
+
+## 4. Forward Pass Detail
 
 **File:** `CorridorKeyModule/core/model_transformer.py`
 
@@ -36,7 +152,7 @@ Key detail: the refiner's output is scaled by `10×` and its weights are whisper
 
 ---
 
-## 2. Alpha Hint Generators
+## 5. Alpha Hint Generators
 
 ### GVM (`gvm_core/`)
 
@@ -57,7 +173,16 @@ Key detail: the refiner's output is scaled by `10×` and its weights are whisper
 
 ---
 
-## 3. Clip Manager Data Model
+## 6. CLI / Library Split
+
+The CLI and pipeline logic are separated into two files:
+
+- **`corridorkey_cli.py`** — CLI entry point. Contains `main()` (argparse), `interactive_wizard()`, and environment configuration. Registered as the `corridorkey` console script in `pyproject.toml`. All launcher scripts (`.sh`, `.bat`) invoke this file.
+- **`clip_manager.py`** — Pipeline library. Contains `ClipEntry`, `ClipAsset`, inference orchestration, alpha generation, and file I/O. Importable without side effects (no `__main__` block).
+
+---
+
+## 7. Clip Manager Data Model and Wizard Flow
 
 **File:** `clip_manager.py`
 
@@ -65,6 +190,28 @@ Key detail: the refiner's output is scaled by `10×` and its weights are whisper
 
 - **`ClipAsset`** — Wraps a media source (directory of images or video file). Properties: `path`, `type` (`'sequence'`/`'video'`), `frame_count`
 - **`ClipEntry`** — Represents a complete shot. Properties: `name`, `root_path`, `input_asset`, `alpha_asset`. Methods: `find_assets()` (discovers Input/AlphaHint with fallback heuristics), `validate_pair()` (ensures frame counts match)
+
+### Wizard Flow (`--action wizard`)
+
+1. **Map Path** — Accepts Windows `V:\` paths and converts to Linux `/mnt/ssd-storage/`
+2. **Analyze** — Detects if target is a single shot or batch of shots
+3. **Organize** — Creates `Input/`, `AlphaHint/`, `VideoMamaMaskHint/` folder structure
+4. **Status Loop** — Categorizes clips as READY / MASKED / RAW
+5. **Actions** — `[v]` VideoMaMa, `[g]` GVM, `[i]` Inference, `[r]` Re-Scan, `[q]` Quit
+
+### Expected Shot Folder Structure
+
+```
+MyShot/
+├── Input/              # RGB frames (PNG, EXR, etc.) or Input.mp4
+├── AlphaHint/          # Coarse alpha masks (generated or manual)
+├── VideoMamaMaskHint/  # Rough binary mask for VideoMaMa (optional)
+└── Output/             # Created by inference
+    ├── FG/             # Straight foreground color (EXR, sRGB gamut)
+    ├── Matte/          # Linear alpha channel (EXR)
+    ├── Processed/      # Premultiplied RGBA (EXR, Linear)
+    └── Comp/           # Preview composite over checkerboard (PNG)
+```
 
 ### User-Configurable Settings (prompted at inference time)
 
@@ -78,7 +225,7 @@ Key detail: the refiner's output is scaled by `10×` and its weights are whisper
 
 ---
 
-## 4. Debugging Checklist
+## 8. Debugging Checklist
 
 When a user reports a visual artifact, check in this order:
 
@@ -93,18 +240,18 @@ When a user reports a visual artifact, check in this order:
 
 ---
 
-## 5. Directives for AI Assistants
+## 9. Directives for AI Assistants
 
 1. **Color math is sacred.** Every compositing operation must respect the sRGB piecewise transfer functions and the straight/premultiplied distinction. When in doubt, trace the data through `color_utils.py`.
 2. **Performance matters.** This processes 4K video frame-by-frame. Every `.numpy()` transfer, `cv2.resize`, or unnecessary copy matters in the hot loop.
 3. **The model is fixed.** Training code is not in this repository. Do not modify `model_transformer.py` architecture unless explicitly building a new training pipeline.
-4. **Test with `test_vram.py`** after any engine changes. Verify VRAM hasn't regressed.
+4. **Run `uv run pytest`** after any changes to verify the test suite still passes (no GPU required). Run `uv run python test_vram.py` after engine changes to verify VRAM hasn't regressed (requires GPU).
 5. **Respect licenses.** CorridorKey allows commercial *use* but not resale. GVM and VideoMaMa are strictly non-commercial.
 6. **Preserve output compatibility.** Don't break the EXR output format that downstream Nuke/Fusion/Resolve workflows depend on.
 
 ---
 
-## 6. Code Artifacts You May Encounter
+## 10. Code Artifacts You May Encounter
 
 - **Commented-out logit clamping** in `model_transformer.py` — An earlier "Humility Clamp" ([-3, 3]) was removed to preserve backbone detail. The commented code can be ignored.
 - **`_orig_mod.` prefix stripping** in checkpoint loading — Handles models saved after `torch.compile()`. This is intentional and must stay.

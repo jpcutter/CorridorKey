@@ -171,3 +171,13 @@ Predictions:  [1, 1, 2048, 2048]  alpha (0-1)
 Output:       [H, W, 1]  alpha
               [H, W, 3]  fg sRGB
 ```
+
+---
+
+## Design Principles
+
+- **VFX-first:** All outputs target professional compositing workflows (EXR half-float, Linear color, proper premultiplication)
+- **Resolution independent:** Arbitrary input → 2048x2048 processing → original resolution output
+- **Offline capable:** No network calls during inference; model weights are local files
+- **Modular:** The three modules (CorridorKey, GVM, VideoMaMa) are independently installable
+- **Color-correct:** Uses piecewise sRGB transfer functions, never approximated gamma 2.2 curves

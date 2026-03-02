@@ -39,8 +39,8 @@ You're comfortable with Python, virtual environments, and want to integrate Corr
 
 | Document | What It Covers |
 |---|---|
-| [CLAUDE.md](../CLAUDE.md) | Project-level AI assistant guide (loaded automatically) |
-| [LLM Handover Guide](LLM_HANDOVER.md) | Detailed technical reference for AI coding assistants |
+| [CLAUDE.md](../CLAUDE.md) | Minimal stub — key files, one rule, doc index (auto-loaded) |
+| [LLM Handover Guide](LLM_HANDOVER.md) | Primary AI reference — quick reference, directory structure, API, debugging, directives |
 
 ---
 
